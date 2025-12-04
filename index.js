@@ -20,29 +20,41 @@ export async function sortHackerNewsArticles() {
 })();
 
 // should see if we can avoid passing page down through multiple functions?
-async function validateDateBatch(n, page) {
+async function collectDateList(n, page) {
   // maybe we run it once first
   const moreLink = await page.$$('.morelink');
   // Do we make this first section a method that we can run repeatedly inside the while loop?
-  const dateList = await page.$$('.age');
-  const batchSize = dateList.count();
+  const dateList = new Array();
+  let dateBatch = await page.$$('.age');
+  let batchSize = dateBatch.count();
   const total = batchSize;
   if (batchSize < n) {
     // while loop + promises a good idea??
     while (total < n) {
+      dateList.push(dateBatch);
       moreLink.click();
-        // click "More"
-        // run function again
-        // add batch checked to total
+      dateBatch = await page.$$('.age');
     }
-    // if total > n
-    // slice off elements until our total is just 100
+    
+    dateBatch.slice(0, total - 100);
+    dateList.push(dateBatch);
+    
+    // Definitely test this 
+    if (dateList.lenth() != total) {
+      throw new Error(ERROR_MESSAGES.DATELIST_WRONG_SIZE);
+    }
+
+    return dateList;
     // then we can validate all elements and make sure that they're all in order (validateDateOrder function below?)
   }
 }
 
+// See if we can use this in collectDateList
+async function getNewDateBatch(page) {
+
+}
+
 export async function valideDateOrder(page) {
-  // const dateList = await page.$$('.age >> a');
   const dateList = await page.$$('.age');
   if (!dateList || dateList.constructor != Array) {
     throw new Error(ERROR_MESSAGES.DATELIST_INVALID_DATA);
@@ -57,14 +69,10 @@ export async function valideDateOrder(page) {
   return validateDatesAreDescending;
 }
 
-async function validateDateBatch()
-
 /**
  * Age categories
  * [minute, minutes, hour, hours]
 */
-
-
 
 
 /**
@@ -85,5 +93,8 @@ async function validateDateBatch()
  * -Items of same category should have numbers ordered asc
  * -edge case -> "0 minutes ago" will ALWAYS come first, and will come before "1 minute ago"
  * --nothing else will have a 0 in front
- * -account for varying batch sizes
+ * --Eventually I realized I could use the ISO dates instead of the date text because we have to assume the coding for the strings is consistent
+ *    and it's just so much easier
+ * -once I got it working for one batch: 
+ *  -Get account for varying batch sizes
  */
