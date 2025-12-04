@@ -1,6 +1,9 @@
 // EDIT THIS FILE TO COMPLETE ASSIGNMENT QUESTION 1
 import { chromium} from "playwright";
 import { ERROR_MESSAGES } from "./errors.js";
+import { writeFileSync } from 'fs';
+import * as path from 'path';
+import { CONFIG_VALUES } from "./constants.js";
 
 export async function sortHackerNewsArticles() {
   // launch browser
@@ -9,23 +12,25 @@ export async function sortHackerNewsArticles() {
   const page = await context.newPage();
 
   // go to Hacker News
-  await page.goto("https://news.ycombinator.com/newest");
+  await page.goto(CONFIG_VALUES.TARGET_URL);
  
   const isValid = valideDateOrder(page);
+  console.log(`Datelist is ascending: ${isValid}`);
+  return isValid;
   // expect(isValid).toBeTruthy();
 }
 
-(async () => {
-  await sortHackerNewsArticles();
-})();
+// (async () => {
+//   await sortHackerNewsArticles();
+// })();
 
 // should see if we can avoid passing page down through multiple functions?
-async function collectDateList(n, page) {
+export async function collectDateList(n, page) {
   // maybe we run it once first
-  const moreLink = await page.$$('.morelink');
+  const moreLink = await page.locator(CONFIG_VALUES.DATE_ACCESSOR);
   // Do we make this first section a method that we can run repeatedly inside the while loop?
   const dateList = new Array();
-  let dateBatch = await page.$$('.age');
+  let dateBatch = await page.$$(CONFIG_VALUES.DATE_ACCESSOR);
   let batchSize = dateBatch.count();
   const total = batchSize;
   if (batchSize < n) {
@@ -33,7 +38,7 @@ async function collectDateList(n, page) {
     while (total < n) {
       dateList.push(dateBatch);
       moreLink.click();
-      dateBatch = await page.$$('.age');
+      dateBatch = await page.$$(CONFIG_VALUES.DATE_ACCESSOR);
     }
     
     dateBatch.slice(0, total - 100);
@@ -55,18 +60,36 @@ async function getNewDateBatch(page) {
 }
 
 export async function valideDateOrder(page) {
-  const dateList = await page.$$('.age');
+  const dateList = collectDateList(CONFIG_VALUES.DATELIST_COUNT_TOTAL, page);
   if (!dateList || dateList.constructor != Array) {
     throw new Error(ERROR_MESSAGES.DATELIST_INVALID_DATA);
   }
   const dateStrings =await Promise.all(dateList
     .map(async dateItem => await dateItem.getAttribute('title')));
 
+  // Definitely test these 3 lines
   const dateStringsAsDates = dateStrings.map(isoString => new Date(isoString.split(' ')[0])).slice(0, 100);
   var isDescending = dateArr => dateArr.slice(1).every((date, index) => date < dateArr[index]);
   var validateDatesAreDescending = isDescending(dateStringsAsDates);
 
   return validateDatesAreDescending;
+}
+
+export async function capturePage() {
+  try {
+    const browser = await chromium.launch({ headless: false });
+  const context = await browser.newContext();
+  const page = await context.newPage();
+
+  // go to Hacker News
+  await page.goto(CONFIG_VALUES.TARGET_URL);
+  const pageContent = await page.content();
+  writeFileSync(path.join(__dirname, CONFIG_VALUES.MOCK_URL), pageContent);
+  } catch (error) {
+    console.log(`Error thrown: ${error}`);
+    throw new Error(error);
+  }
+  return true;
 }
 
 /**
