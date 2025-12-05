@@ -1,9 +1,9 @@
 // EDIT THIS FILE TO COMPLETE ASSIGNMENT QUESTION 1
-import { chromium} from "playwright";
-import { ERROR_MESSAGES } from "./errors.js";
-import { writeFileSync } from 'fs';
-import * as path from 'path';
-import { CONFIG_VALUES } from "./constants.js";
+const { chromium} = require("playwright");
+const { ERROR_MESSAGES } = require ("./errors.js");
+const { writeFileSync } = require('fs');
+const path = require('path');
+const CONFIG_VALUES = require("./constants.js");
 
 export async function sortHackerNewsArticles() {
   // launch browser
@@ -27,17 +27,23 @@ export async function sortHackerNewsArticles() {
 // should see if we can avoid passing page down through multiple functions?
 export async function collectDateList(n, page) {
   // maybe we run it once first
-  const moreLink = await page.locator(CONFIG_VALUES.DATE_ACCESSOR);
+  const moreLink = await page.locator(CONFIG_VALUES.MORELINK_ACCESSOR);
   // Do we make this first section a method that we can run repeatedly inside the while loop?
   const dateList = new Array();
   let dateBatch = await page.$$(CONFIG_VALUES.DATE_ACCESSOR);
-  let batchSize = dateBatch.count();
+  let batchSize = dateBatch.length;
   const total = batchSize;
   if (batchSize < n) {
     // while loop + promises a good idea??
     while (total < n) {
+      // Get href from moreLink
       dateList.push(dateBatch);
-      moreLink.click();
+      let newpageUrl = moreLink.getAttribute('href');
+      Promise.all(
+        page.waitForURL(newpageUrl),
+        moreLink.click()
+      );
+
       dateBatch = await page.$$(CONFIG_VALUES.DATE_ACCESSOR);
     }
     
@@ -120,4 +126,9 @@ export async function capturePage() {
  *    and it's just so much easier
  * -once I got it working for one batch: 
  *  -Get account for varying batch sizes
- */
+ * -Can't mock context and browser using vitest because we're using ModuleJS
+ * -Switched over to Jest because I really wanted to ensure that we can test our methods locally without needing to access the website everytime and basiscally do an E2E test
+ * -Couldn't get jest to work and I didn't want to spend too much time, I'm aware that this is an E2E test and that's not ideal
+ * -Hopefully the scraped mock will be enough
+ * -used constants to keep it modular and avoid magic strings 
+*/
