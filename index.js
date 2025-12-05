@@ -34,52 +34,37 @@ export async function collectDateList(n, page, context) {
     // maybe we run it once first
     // Do we make this first section a method that we can run repeatedly inside the while loop?
     const dateList = new Array();
-    let moreLink = await page.locator(CONFIG_VALUES.MORELINK_ACCESSOR);
-    let dateBatch = await page.$$(CONFIG_VALUES.DATE_ACCESSOR);
-    let batchSize = dateBatch.length;
-    const total = batchSize;
+    // let moreLink = await page.locator(CONFIG_VALUES.MORELINK_ACCESSOR).getAttribute('href');
+    // let dateBatch = await page.$$(CONFIG_VALUES.DATE_ACCESSOR);
+    // let dateStringsBatch = await Promise.all(dateBatch
+    //   .map(dateItem => dateItem.getAttribute('title'))
+    //   .map(isoString => new Date(isoString.split(' ')[0])).slice(0, 100)
+    // );
+    // let batchSize = dateStringsBatch.length;
+    // let total = batchSize;
+    let [dateStringsAsISOdates, batchSize, moreLink, total] = await getNewDateBatch(page, 0);
     if (batchSize < n) {
       while (total < n) {
-        dateList.push(dateBatch);
-        let newpageUrlStub = await moreLink.getAttribute('href');
-        // let newpageUrl = `${CONFIG_VALUES.TARGET_URL_BASE}${newpageUrlStub}`;
-        let newpageUrl = `**${newpageUrlStub.split('newest')[1]}`;
-        // let newpageUrl = `**${newpageUrlStub}`;
-        // await sessionData.page.click(CONFIG_VALUES.MORELINK_ACCESSOR);
-        // await currentPage.waitForURL(newpageUrl);
-        
-        // console.log("click type:", typeof await currentPage.click);
-        // console.log("click type:", typeof await currentPage.click(CONFIG_VALUES.MORELINK_ACCESSOR));
-
-        // console.log("is click a promise:", await currentPage.click(CONFIG_VALUES.MORELINK_ACCESSOR));
-        // console.log("is nav a promise:", currentPage.waitForURL(newpageUrl))
-      
-        // await Promise.all([
-          // sessionData.page.waitForNavigation(),
-        //   currentPage.click(CONFIG_VALUES.MORELINK_ACCESSOR),
-        //   currentPage.waitForURL(newpageUrl)
-        // ]);
-        
-        const [_, __, nextPage] = await Promise.all([
-          // sessionData.page.waitForNavigation(),
-          page.click(CONFIG_VALUES.MORELINK_ACCESSOR),
-          page.waitForLoadState('load')
+        dateList.push(...dateStringsAsISOdates);
+        await Promise.all([
+          currentPage.click(CONFIG_VALUES.MORELINK_ACCESSOR),
+          // currentPage.waitForLoadState('load')
+          currentPage.waitForURL(`**/${moreLink}`)
         ]);
+
+        [dateStringsAsISOdates, batchSize, moreLink, total] = await getNewDateBatch(page, total);
         
-        if(nextPage) {
-          await nextPage.waitForLoadState();
-          currentPage = nextPage;
-        }
-        // moreLink = await currentPage.locator(CONFIG_VALUES.MORELINK_ACCESSOR);
-        // dateBatch = await currentPage.$$(CONFIG_VALUES.DATE_ACCESSOR);
-        // dateBatch = await currentPage.$$(CONFIG_VALUES.DATE_ACCESSOR);
+        // This might be the repeatable part
+          // moreLink = await page.locator(CONFIG_VALUES.MORELINK_ACCESSOR).getAttribute('href')
+          // dateBatch = await currentPage.$$(CONFIG_VALUES.DATE_ACCESSOR);
+          // total += dateStringsBatch.length;
+        // }
       }
       
-      dateBatch.slice(0, total - 100);
-      dateList.push(dateBatch);
+      dateList.push(...dateStringsAsISOdates.slice(0, dateStringsAsISOdates.length - (total - n)));
       
       // Definitely test this 
-      if (dateList.lenth() != total) {
+      if (dateList.length != n) {
         throw new Error(ERROR_MESSAGES.DATELIST_WRONG_SIZE);
       }
       
@@ -92,8 +77,15 @@ export async function collectDateList(n, page, context) {
 }
 
 // See if we can use this in collectDateList
-async function getNewDateBatch(page) {
-
+async function getNewDateBatch(page, total) {
+  let moreLink = await page.locator(CONFIG_VALUES.MORELINK_ACCESSOR).getAttribute('href');
+  let dateBatch = await page.$$(CONFIG_VALUES.DATE_ACCESSOR);
+  let dateStrings = await Promise.all(dateBatch
+    .map(dateItem => dateItem.getAttribute('title'))
+  );
+  let dateStringsAsISOdates = dateStrings.map(isoString => new Date(isoString.split(' ')[0])).slice(0, 100);
+  let batchSize = dateStringsAsISOdates.length;
+  return [dateStringsAsISOdates, batchSize, moreLink, total + batchSize];
 }
 
 export async function valideDateOrder(page, context) {
@@ -101,13 +93,10 @@ export async function valideDateOrder(page, context) {
   if (!dateList || dateList.constructor != Array) {
     throw new Error(ERROR_MESSAGES.DATELIST_INVALID_DATA);
   }
-  const dateStrings =await Promise.all(dateList
-    .map(async dateItem => await dateItem.getAttribute('title')));
 
   // Definitely test these 3 lines
-  const dateStringsAsDates = dateStrings.map(isoString => new Date(isoString.split(' ')[0])).slice(0, 100);
   var isDescending = dateArr => dateArr.slice(1).every((date, index) => date < dateArr[index]);
-  var validateDatesAreDescending = isDescending(dateStringsAsDates);
+  var validateDatesAreDescending = isDescending(dateList);
 
   return validateDatesAreDescending;
 }
