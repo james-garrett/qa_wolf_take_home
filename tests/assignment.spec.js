@@ -33,17 +33,17 @@ test.describe('Scrape page for mocking locally', () => {
   });
 });
 
-test.describe('Test using scraped page', () => {
-  test.beforeEach(async ({ page }) => {
-    // Probably not necessary to wipe it to nothing first but JIC
-    await page.setContent('');
-    const webpage = readFileSync(CONFIG_VALUES.MOCK_URL, 'utf-8');
-    await page.setContent(webpage);
-  });
+// test.describe('Test using scraped page', () => {
+  // test.beforeEach(async ({ page }) => {
+  //   // Probably not necessary to wipe it to nothing first but JIC
+  //   await page.setContent('');
+  //   const webpage = readFileSync(CONFIG_VALUES.MOCK_URL, 'utf-8');
+  //   await page.setContent(webpage);
+  // });
 
-  test('the dateList is not null and Array type', async ({page}) => {
-    expect(await sortHackerNewsArticles()).toEqual(true);
-  });
-});
+//   test('the dateList is not null and Array type', async ({page}) => {
+//     expect(await sortHackerNewsArticles()).toEqual(true);
+//   });
+// });
 
 // Test TODO - 

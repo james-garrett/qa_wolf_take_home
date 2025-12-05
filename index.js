@@ -5,58 +5,89 @@ const { writeFileSync } = require('fs');
 const path = require('path');
 const CONFIG_VALUES = require("./constants.js");
 
+// we should make a struct for browser/context/page so we can pass it between methods without 
+
 export async function sortHackerNewsArticles() {
   // launch browser
-  const browser = await chromium.launch({ headless: false });
-  const context = await browser.newContext();
-  const page = await context.newPage();
+  let browser = await chromium.launch({ headless: false });
+  let context = await browser.newContext();
+  let page = await context.newPage();
+  // let sessionData = new SessionData(browser, context, page);
 
   // go to Hacker News
   await page.goto(CONFIG_VALUES.TARGET_URL);
  
-  const isValid = valideDateOrder(page);
+  const isValid = await valideDateOrder(page, context);
   console.log(`Datelist is ascending: ${isValid}`);
   return isValid;
   // expect(isValid).toBeTruthy();
 }
 
-// (async () => {
-//   await sortHackerNewsArticles();
-// })();
+(async () => {
+  await sortHackerNewsArticles();
+})();
 
 // should see if we can avoid passing page down through multiple functions?
-export async function collectDateList(n, page) {
-  // maybe we run it once first
-  const moreLink = await page.locator(CONFIG_VALUES.MORELINK_ACCESSOR);
-  // Do we make this first section a method that we can run repeatedly inside the while loop?
-  const dateList = new Array();
-  let dateBatch = await page.$$(CONFIG_VALUES.DATE_ACCESSOR);
-  let batchSize = dateBatch.length;
-  const total = batchSize;
-  if (batchSize < n) {
-    // while loop + promises a good idea??
-    while (total < n) {
-      // Get href from moreLink
+export async function collectDateList(n, page, context) {
+  try {
+    let currentPage = page;
+    // maybe we run it once first
+    // Do we make this first section a method that we can run repeatedly inside the while loop?
+    const dateList = new Array();
+    let moreLink = await page.locator(CONFIG_VALUES.MORELINK_ACCESSOR);
+    let dateBatch = await page.$$(CONFIG_VALUES.DATE_ACCESSOR);
+    let batchSize = dateBatch.length;
+    const total = batchSize;
+    if (batchSize < n) {
+      while (total < n) {
+        dateList.push(dateBatch);
+        let newpageUrlStub = await moreLink.getAttribute('href');
+        // let newpageUrl = `${CONFIG_VALUES.TARGET_URL_BASE}${newpageUrlStub}`;
+        let newpageUrl = `**${newpageUrlStub.split('newest')[1]}`;
+        // let newpageUrl = `**${newpageUrlStub}`;
+        // await sessionData.page.click(CONFIG_VALUES.MORELINK_ACCESSOR);
+        // await currentPage.waitForURL(newpageUrl);
+        
+        // console.log("click type:", typeof await currentPage.click);
+        // console.log("click type:", typeof await currentPage.click(CONFIG_VALUES.MORELINK_ACCESSOR));
+
+        // console.log("is click a promise:", await currentPage.click(CONFIG_VALUES.MORELINK_ACCESSOR));
+        // console.log("is nav a promise:", currentPage.waitForURL(newpageUrl))
+      
+        // await Promise.all([
+          // sessionData.page.waitForNavigation(),
+        //   currentPage.click(CONFIG_VALUES.MORELINK_ACCESSOR),
+        //   currentPage.waitForURL(newpageUrl)
+        // ]);
+        
+        const [_, __, nextPage] = await Promise.all([
+          // sessionData.page.waitForNavigation(),
+          page.click(CONFIG_VALUES.MORELINK_ACCESSOR),
+          page.waitForLoadState('load')
+        ]);
+        
+        if(nextPage) {
+          await nextPage.waitForLoadState();
+          currentPage = nextPage;
+        }
+        // moreLink = await currentPage.locator(CONFIG_VALUES.MORELINK_ACCESSOR);
+        // dateBatch = await currentPage.$$(CONFIG_VALUES.DATE_ACCESSOR);
+        // dateBatch = await currentPage.$$(CONFIG_VALUES.DATE_ACCESSOR);
+      }
+      
+      dateBatch.slice(0, total - 100);
       dateList.push(dateBatch);
-      let newpageUrl = moreLink.getAttribute('href');
-      Promise.all(
-        page.waitForURL(newpageUrl),
-        moreLink.click()
-      );
-
-      dateBatch = await page.$$(CONFIG_VALUES.DATE_ACCESSOR);
+      
+      // Definitely test this 
+      if (dateList.lenth() != total) {
+        throw new Error(ERROR_MESSAGES.DATELIST_WRONG_SIZE);
+      }
+      
+      return dateList;
+      // then we can validate all elements and make sure that they're all in order (validateDateOrder function below?)
     }
-    
-    dateBatch.slice(0, total - 100);
-    dateList.push(dateBatch);
-    
-    // Definitely test this 
-    if (dateList.lenth() != total) {
-      throw new Error(ERROR_MESSAGES.DATELIST_WRONG_SIZE);
-    }
-
-    return dateList;
-    // then we can validate all elements and make sure that they're all in order (validateDateOrder function below?)
+  } catch (error) {
+    throw new Error(error);
   }
 }
 
@@ -65,8 +96,8 @@ async function getNewDateBatch(page) {
 
 }
 
-export async function valideDateOrder(page) {
-  const dateList = collectDateList(CONFIG_VALUES.DATELIST_COUNT_TOTAL, page);
+export async function valideDateOrder(page, context) {
+  const dateList = await collectDateList(CONFIG_VALUES.DATELIST_COUNT_TOTAL, page, context);
   if (!dateList || dateList.constructor != Array) {
     throw new Error(ERROR_MESSAGES.DATELIST_INVALID_DATA);
   }
@@ -96,6 +127,14 @@ export async function capturePage() {
     throw new Error(error);
   }
   return true;
+}
+
+class SessionData {
+  constructor(browser, context, page) {
+    this.browser = browser;
+    this.context = context;
+    this.page = page;
+  }
 }
 
 /**
