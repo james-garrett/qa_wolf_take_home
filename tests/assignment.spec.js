@@ -4,23 +4,58 @@ const TEST_DATA = require('../testData.js');
 const {readFileSync} = require('fs');
 const CONFIG_VALUES = require("../constants.js");
 const jest = require('jest-mock');
-// const {sortHackerNewsArticles, } = require('../index.js');
 const { assignmentModule, sortHackerNewsArticles} = require('../index.js');
 
 const mockLocator = {
-  click: jest.fn()
+  click: jest.fn(),
+  getAttribute: jest.fn()
 };
 
 const mockPage = {
   goto: jest.fn(),
   locator: jest.fn().mockReturnValue(mockLocator),
   waitForSelector: jest.fn(),
-  evaluate: jest.fn()
+  evaluate: jest.fn(),
+  click: jest.fn(),
+  waitForURL: jest.fn()
 };
 
-// const mockCollectDateList = {
-//   collectDateList: () => {}
-// };
+const testDatesDescending = TEST_DATA.DATELIST.map(isoString => new Date(isoString));
+const testDatesAscending = [...testDatesDescending].sort((dateA, dateB) => dateA.getTime() - dateB.getTime());
+
+/**
+ * Fun shuffling program:
+ * 1. puts each date into an object with a random number
+ * 2. sorts items based on the random number for each date
+ * 3. Destructures object to just get value
+ */
+const testDatesShuffled = testDatesDescending.map(value => ({value, sort: Math.random()}))
+                                                .sort((dateA, dateB) => dateA.sort - dateB.sort)
+                                                .map(({ value}) => value);
+
+function generateTestBatches(array, batchSize) {
+  const result = array.reduce((resultArray, item, index) => { 
+    const chunkIndex = Math.floor(index/batchSize)
+
+    if(!resultArray[chunkIndex]) {
+      resultArray[chunkIndex] = [] // start a new chunk
+    }
+
+    resultArray[chunkIndex].push(item)
+
+    return resultArray
+  }, []);
+  return result;
+}
+
+// Todo -> put this in an es6 function
+function generateBatchGetMocks(testBatch) {
+  let mockBatchResponses = [];
+  for(let i = 0; i <= testBatch.length; i++) {
+      mockBatchResponses.push(jest.spyOn(assignmentModule, 'getNewDateBatch').mockImplementationOnce(() => testBatch[i]));
+    };
+  return mockBatchResponses;
+}
 
 test('has title', async ({ page }) => {
   await page.goto(CONFIG_VALUES.TARGET_URL);
@@ -35,73 +70,44 @@ test.describe('Sorting Hacker News Articles E2E', async () => {
 });
 
 test.describe('Valide Date Order', () => {
-  test.beforeEach(() => {
-    // mockCollectDateList.mockReset();
-    jest.resetAllMocks();
-    jest.spyOn(assignmentModule, 'collectDateList').mockImplementation(() => TEST_DATA.DATELIST);
+  test('succeeds when the dateList is not null and Array type', async () => {
+    jest.spyOn(assignmentModule, 'collectDateList').mockImplementation(() => testDatesDescending);
+    expect(await assignmentModule.validateDateOrder(mockPage)).toBeTruthy();
   });
 
-  test('the dateList is not null and Array type', async () => {
-    // mock page
-    // jest.spyOn(assignmentModule, 'collectDateList').mockReturnValue(TEST_DATA.DATELIST);
-    const isValidDateOrder = await assignmentModule.validateDateOrder(mockPage);
-    expect(isValidDateOrder).toBeTruthy();
-    // expect(await sortHackerNewsArticles()).toEqual(true);
+  test('throws error when the dateList is null and throws error', async () => {
+    jest.spyOn(assignmentModule, 'collectDateList').mockImplementation(() => null);
+    expect(assignmentModule.validateDateOrder(mockPage)).rejects.toThrow(ERROR_MESSAGES.DATELIST_INVALID_DATA);
   });
-
-  // test('the dateList is null and throws error', async () => {
-    // expect(await sortHackerNewsArticles()).toEqual(true);
-  // });
   
-  // test('the dateList is not sorted correctly', async () => {
-    // invert data list to be ascending
-    // let testDataAsc = testdata.DATELIST.sort((dateA, dateB) => new Date(dateA) - new Date(dateB));
-    
-    // Set up interceptor for collectDateList 
-    
-    // expect(await assignmentModule.validateDateOrder(mockPage)).toEqual(true);
-    // expect(await sortHackerNewsArticles()).toEqual(false);
-
-    // randomize data list order
-
-    // expect(await sortHackerNewsArticles()).toEqual(true);
-  // });
-  // test('the dateList does not have the required number of entries', async () => {
-    // expect(await sortHackerNewsArticles()).toEqual(true);
-  // });
-}, 15000);
-
-test.describe('Scrape page for mocking locally', () => {
-  test('page downloads content without error', async () => {
-    try {
-      var result = await assignmentModule.capturePage();
-    } catch (error) {
-      throw error;
-    }
-    expect(result).toBeTruthy();
+  test('returns false when the dateList is ascending', async () => {
+    jest.spyOn(assignmentModule, 'collectDateList').mockImplementation(() => testDatesAscending);
+    expect(await assignmentModule.validateDateOrder(mockPage)).toBeFalsy();
   });
-  test('load mock HTML without error', async ({ page }) => {
-    const webpage = readFileSync(CONFIG_VALUES.MOCK_URL, 'utf-8');
-    await page.setContent(webpage);
-    expect(await page.locator('div.hname:has(a:has-text("Hacker News"))'));
+
+    test('returns false when the dateList contains inconsistencies in sorting', async () => {
+    jest.spyOn(assignmentModule, 'collectDateList').mockImplementation(() => testDatesShuffled);
+    expect(await assignmentModule.validateDateOrder(mockPage)).toBeFalsy();
   });
 });
 
-// test.describe('Test using scraped page', () => {
-  // test.beforeEach(async ({ page }) => {
-  //   // Probably not necessary to wipe it to nothing first but JIC
-  //   await page.setContent('');
-  //   const webpage = readFileSync(CONFIG_VALUES.MOCK_URL, 'utf-8');
-  //   await page.setContent(webpage);
-  // });
+test.describe('collectDateList ', () => {
+  test('succeeds when receiving the correct number of dates', async () => {
 
-//   test('the dateList is not null and Array type', async ({page}) => {
-//     expect(await sortHackerNewsArticles()).toEqual(true);
-//   });
-// }); 
 
-/**
- * Testing TODO - test for false positives
- *              - maybe see if we can limit number of exported functions and do a lot more mocks?
- *              -- This could honestly be far too much effort  
- * */ 
+    // Mock response from getNewDateBatch to return TEST_DATA.DATELIST
+    let testBatch = generateTestBatches(TEST_DATA.DATELIST,30);
+    generateBatchGetMocks(testBatch);
+    // jest.spyOn(assignmentModule, 'getNewDateBatch').mockImplementationOnce(() => testBatch[0]);
+    
+    const expected = TEST_DATA.DATELIST.slice(0, 100);
+    const dateList = await assignmentModule.collectDateList(CONFIG_VALUES.DATELIST_COUNT_TOTAL, mockPage);
+    expect(dateList).toEqual(expected);
+  });
+
+  test('throws when the dateList does not have the required number of entries', async () => {
+    let testBatch = generateTestBatches(TEST_DATA.DATELIST.slice(0, 1), 30);
+    generateBatchGetMocks(testBatch);
+    expect(assignmentModule.collectDateList(CONFIG_VALUES.DATELIST_COUNT_TOTAL, mockPage)).rejects.toThrow(ERROR_MESSAGES.DATELIST_WRONG_SIZE);
+  });
+});

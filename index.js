@@ -5,33 +5,28 @@ const { writeFileSync } = require('fs');
 const path = require('path');
 const CONFIG_VALUES = require("./constants.js");
 
-// we should make a struct for browser/context/page so we can pass it between methods without 
-
 async function sortHackerNewsArticles() {
-  // launch browser
   let browser = await chromium.launch({ headless: false });
   let context = await browser.newContext();
   let page = await context.newPage();
-  // let sessionData = new SessionData(browser, context, page);
   
   try {
 
     page.on('request', request => {
       console.log('Request URL:', request.url());
     })
-    // go to Hacker News
+
     await page.goto(CONFIG_VALUES.TARGET_URL);
     
     const isValid = await assignmentModule.validateDateOrder(page);
     console.log(`Datelist is ascending: ${isValid}`);
     return isValid;
-    // expect(isValid).toBeTruthy();
   } finally {
     await browser.close();
   }
 }
 
-// This if block just ensures that this method won't run during testing
+// This 'if' block just ensures that this method won't run during testing
 if (require.main === module) {
   (async () => {
     await sortHackerNewsArticles();
@@ -40,94 +35,59 @@ if (require.main === module) {
   
   
 const assignmentModule = {
-  // should see if we can avoid passing page down through multiple functions?
   async collectDateList(n, page) {
-    try {
-      let currentPage = page;
       const dateList = new Array();
-      let [dateStringsAsISOdates, batchSize, moreLink, total] = await assignmentModule.getNewDateBatch(page, 0);
-      if (batchSize < n) {
-        while (total < n) {
+      let dateStringsAsISOdates = await assignmentModule.getNewDateBatch(page);
+      let moreLink = await page.locator(CONFIG_VALUES.MORELINK_ACCESSOR).getAttribute('href');
+      
+      // If there's no more pages, or if there's no more items, or batches, this while loop is doomed
+        while ([...dateList].length < n) {
           dateList.push(...dateStringsAsISOdates);
           await Promise.all([
-            currentPage.click(CONFIG_VALUES.MORELINK_ACCESSOR),
-            currentPage.waitForURL(`**/${moreLink}`)
+            page.click(CONFIG_VALUES.MORELINK_ACCESSOR),
+            page.waitForURL(`**/${moreLink}`)
           ]);
 
-          [dateStringsAsISOdates, batchSize, moreLink, total] = await assignmentModule.getNewDateBatch(page, total);
+          // this line here assumes getNewDateBatch will ALWAYS return, which isn't good
+          dateStringsAsISOdates = await assignmentModule.getNewDateBatch(page);
+        if (dateStringsAsISOdates == undefined) {
+          break;
         }
-        dateList.push(...dateStringsAsISOdates.slice(0, dateStringsAsISOdates.length - (total - n)));
-        
+          moreLink = await page.locator(CONFIG_VALUES.MORELINK_ACCESSOR).getAttribute('href');
+        }
         // Definitely test this 
-        if (dateList.length != n) {
+        if (dateList.length < n) {
           throw new Error(ERROR_MESSAGES.DATELIST_WRONG_SIZE);
         }
+
+        let trimmedDateList = dateList.slice(0, n - dateList.length);
         
-        return dateList;
-      }
-    } catch (error) {
-      throw new Error(error);
-    }
+        
+        return trimmedDateList;
   },
 
-  // See if we can use this in collectDateList
-  async getNewDateBatch(page, total) {
-    let moreLink = await page.locator(CONFIG_VALUES.MORELINK_ACCESSOR).getAttribute('href');
-    const html = await page.locator(CONFIG_VALUES.MORELINK_ACCESSOR).evaluate(el => el.outerHTML);
+  async getNewDateBatch(page) {
     let dateBatch = await page.$$(CONFIG_VALUES.DATE_ACCESSOR);
     let dateStrings = await Promise.all(dateBatch
       .map(dateItem => dateItem.getAttribute('title'))
     );
     let dateStringsAsISOdates = dateStrings.map(isoString => new Date(isoString.split(' ')[0])).slice(0, 100);
-    let batchSize = dateStringsAsISOdates.length;
-    return [dateStringsAsISOdates, batchSize, moreLink, total + batchSize];
+    return dateStringsAsISOdates;
   },
 
   async validateDateOrder(page) {
     const dateList = await assignmentModule.collectDateList(CONFIG_VALUES.DATELIST_COUNT_TOTAL, page);
-    if (!dateList || dateList.constructor != Array      ) {
+    if (!dateList || dateList.constructor != Array) {
       throw new Error(ERROR_MESSAGES.DATELIST_INVALID_DATA);
     }
 
     // Definitely test these 3 lines
-    var isDescending = dateArr => dateArr.slice(1).every((date, index) => date < dateArr[index]);
+    var isDescending = dateArr => dateArr.slice(1).every((date, index) => date <= dateArr[index]);
     var validateDatesAreDescending = isDescending(dateList);
 
     return validateDatesAreDescending;
   },
-
-  async capturePage() {
-    try {
-      const browser = await chromium.launch({ headless: false });
-    const context = await browser.newContext();
-    const page = await context.newPage();
-
-    // go to Hacker News
-    await page.goto(CONFIG_VALUES.TARGET_URL);
-    const pageContent = await page.content();
-    writeFileSync(path.join(__dirname, CONFIG_VALUES.MOCK_URL), pageContent);
-    } catch (error) {
-      console.log(`Error thrown: ${error}`);
-      throw new Error(error);
-    }
-    return true;
-  }
-
-  // class SessionData {
-  //   constructor(browser, context, page) {
-  //     this.browser = browser;
-  //     this.context = context;
-  //     this.page = page;
-  //   }
-  // },
 };
-
-// module.exports = {
-//   capturePage, 
-//   sortHackerNewsArticles, 
-//   validateDateOrder, 
-//   collectDateList
-// }
 
 module.exports = {
   assignmentModule,
