@@ -33,7 +33,6 @@ if (require.main === module) {
   })();
 }
   
-  
 const assignmentModule = {
   async collectDateList(n, page) {
       const dateList = new Array();

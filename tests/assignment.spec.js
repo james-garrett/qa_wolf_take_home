@@ -48,7 +48,6 @@ function generateTestBatches(array, batchSize) {
   return result;
 }
 
-// Todo -> put this in an es6 function
 function generateBatchGetMocks(testBatch) {
   let mockBatchResponses = [];
   for(let i = 0; i <= testBatch.length; i++) {
@@ -94,12 +93,9 @@ test.describe('Valide Date Order', () => {
 test.describe('collectDateList ', () => {
   test('succeeds when receiving the correct number of dates', async () => {
 
-
-    // Mock response from getNewDateBatch to return TEST_DATA.DATELIST
     let testBatch = generateTestBatches(TEST_DATA.DATELIST,30);
     generateBatchGetMocks(testBatch);
-    // jest.spyOn(assignmentModule, 'getNewDateBatch').mockImplementationOnce(() => testBatch[0]);
-    
+
     const expected = TEST_DATA.DATELIST.slice(0, 100);
     const dateList = await assignmentModule.collectDateList(CONFIG_VALUES.DATELIST_COUNT_TOTAL, mockPage);
     expect(dateList).toEqual(expected);
